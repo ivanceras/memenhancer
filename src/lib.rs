@@ -5,29 +5,65 @@ extern crate svg;
 use unicode_width::UnicodeWidthStr;
 use unicode_width::UnicodeWidthChar;
 use svg::node::element::Circle as SvgCircle;
+use svg::node::element::Text as SvgText;
+use svg::Node;
 
+
+pub struct Settings {
+    text_width: f32,
+    text_height: f32,
+}
+
+impl Default for Settings {
+    fn default() -> Settings {
+        Settings {
+            text_width: 8.0,
+            text_height: 16.0,
+        }
+    }
+}
 
 /// The whole meme body
 /// 
 #[derive(Clone,Debug)]
 struct Meme{
     /// location to the left until a space is encountered
-    left: Option<usize>,
+    start_position: usize,
     head: Head,
     /// location to the right until a space is encoutered
-    right: Option<usize>,
-    /// all chacaters to the left and right without whitespace in between
-    source: String
+    end_position: usize,
+    /// string at the left
+    left_side: String,
+    /// string at the right
+    right_side: String
 }
+
+impl Meme{
+    
+    fn get_svg_elements(&self, x: usize, y: usize, settings: &Settings) -> Vec<Box<Node>>{
+        let mut elements = vec![];
+        elements.extend(self.head.get_svg_elements(x, y, settings));
+        elements
+    }
+
+    
+}
+
 
 /// The head of the meme
 /// the face is the string in between
 /// used in detecting if it's a valid meme or not
 #[derive(Clone,Debug)]
 struct Head{
-    left: Option<usize>,
+    // character position
+    start_position: usize,
+    // left x location x1
+    startx: usize,
     face: String,
-    right: Option<usize>
+    // right x location x2
+    endx: usize,
+    // end position
+    end_position: usize
 }
 
 impl Head{
@@ -37,16 +73,50 @@ impl Head{
     }
 
     fn distance(&self) -> usize {
-        if let Some(right) = self.right{
-            if let Some(left) = self.left{
-                right - left     
-            }else { 0 }
-        }else{ 0 }
+        self.endx - self.startx     
     }
 
     fn face_width(&self) -> usize{
         self.face.width()
     }
+    
+    fn get_svg_elements(&self, x:usize, y:usize,settings:&Settings) -> Vec<Box<Node>> {
+        let mut elements: Vec<Box<Node>> = vec![];
+        elements.push(Box::new(self.get_circle(x, y, settings)));
+        elements.push(Box::new(self.get_face_text(x, y, settings)));
+        elements
+    }
+
+    fn get_face_text(&self, x:usize, y:usize, settings: &Settings) -> SvgText{
+        let sx = x as f32 * settings.text_width + settings.text_width / 4.0;
+        let sy = y as f32 * settings.text_height + settings.text_height * 3.0 / 4.0;
+        let mut svg_text = SvgText::new()
+            .set("x", sx)
+            .set("y", sy);
+        let text_node = svg::node::Text::new(escape_char(&self.face.to_string()));
+        svg_text.append(text_node);
+        svg_text
+    }
+
+    fn get_circle(&self, x:usize, y:usize, settings: &Settings)-> SvgCircle{
+        let text_width = settings.text_width;
+        let text_height = settings.text_height;
+        let xloc = x as f32 * text_width;
+        let yloc = y as f32 * text_height;
+        let radius = self.face_width() as f32 / 2.0 + 0.5;
+        let startx = self.startx as f32;
+        let endx = self.endx as f32;
+        let center = 0.5 + startx + radius;
+        let cx = center * text_width + xloc;
+        let cy = yloc + text_height / 2.0;
+        let cr = radius * text_width;
+
+        SvgCircle::new()
+            .set("cx",cx)
+            .set("cy", cy)
+            .set("r", cr)
+    }
+
 }
 
 #[derive(Debug)]
@@ -101,22 +171,27 @@ pub fn is_meme(ch: &str) -> bool{
 
 pub fn to_svg(s: &str, x: usize, y:usize, 
         text_width: f32, text_height: f32) -> String {
-    let svg_circles = get_svg_circles(s, x, y, text_width, text_height);
+    let elements = get_svg_elements(s, x, y, text_width, text_height);
     let mut svg = String::new();
-    for c in svg_circles{
-        svg.push_str(&c.to_string());
+    for elm in elements{
+        svg.push_str(&elm.to_string())
     }
     svg
 }
 
-pub fn get_svg_circles(s: &str, x: usize, y:usize, 
-        text_width: f32, text_height: f32) -> Vec<SvgCircle> {
-    let circles = get_circles(s, x, y, text_width, text_height);
-    let mut svg_circles = vec![];
-    for c in circles{
-        svg_circles.push(circle_to_svg(&c));
+pub fn get_svg_elements(s: &str, x: usize, y:usize, 
+        text_width: f32, text_height: f32) -> Vec<Box<Node>> {
+    let settings = Settings {
+                    text_width: text_width,
+                    text_height: text_height
+                   };
+    let memes = parse_memes(s);
+    let mut svg = vec![];
+    for meme in memes{
+        let mel = meme.get_svg_elements(x+10, y, &settings);
+        svg.extend(mel);
     }
-    svg_circles
+    svg
 }
 
 fn circle_to_svg(circle: &Circle) -> SvgCircle {
@@ -129,89 +204,101 @@ fn circle_to_svg(circle: &Circle) -> SvgCircle {
 pub fn get_circles(s: &str, x: usize, y:usize, 
         text_width: f32, text_height: f32) -> Vec<Circle>{
     let mut circles = vec![];
-    let text_width = 8.0;
-    let text_height = 16.0;
     let xloc = x as f32 * text_width;
     let yloc = y as f32 * text_height;
-    //println!("{}", s);
-    let memes = meme_faces(s);
+    let memes = parse_memes(s);
     for m in memes{
-        /*
-        println!("face: {}", m.face);
-        println!(" start: {}", m.left.unwrap());
-        println!(" width: {}", m.face_width());
-        println!(" distance: {}", m.bound_distance());
-        */
-        let radius = m.face_width() as f32 / 2.0 + 0.5;
-        let left = m.left.unwrap() as f32;
-        let right = m.right.unwrap() as f32;
-        let left_adjustment = 0.5 + left * 0.1;
-        let right_adjustment = 0.5 + right * 0.1;
-        let radius_adjustment = radius + radius * 0.1;
-        //let center = left + left_adjustment + radius_adjustment ;
-        let center = 0.5 + left + radius;
+        let head = m.head;
+        let radius = head.face_width() as f32 / 2.0 + 0.5;
+        let startx = head.startx as f32;
+        let endx = head.endx as f32;
+        let left_adjustment = 0.5 + startx * 0.1;
+        let right_adjustment = 0.5 + endx * 0.1;
+        let center = 0.5 + startx + radius;
         let comp_center = center * text_width + xloc;
-        /*
-        println!("center: {}", center * text_width);
-        println!("radious: {}", radius * text_width);
-        */
         let circle = Circle{
             x: comp_center,
             y: yloc + text_height / 2.0,
             r: radius * text_width
         };
-        //println!("{:?}", circle);
         circles.push(circle);
-        //println!(" ");
     }
     circles
 }
 
-fn meme_faces(s: &str) -> Vec<Head> {
-    let marks = mark_faces(s);
-    marks.into_iter()
-        .filter(|m| m.is_meme_face()).collect()
-}
 
 
-fn mark_faces(s: &str) -> Vec<Head> {
-    let mut paren_start = false;
+fn parse_memes(s: &str) -> Vec<Meme> {
+    let mut memes = vec![];
+    let mut paren_opened = false;
     let mut meme_face = String::new();
     let mut index = 0;
     let mut total_width = 0;
     let mut face_markers:Vec<Head> = vec![];
+    let mut startx = 0;
+    let mut start_position = 0;
+    let mut meme_start = 0;
+    let mut meme_end = 0;
+    let mut meme_body = String::new();
+    let mut meme_left_side = String::new();
+    let mut meme_right_side = String::new();
+    let mut meme_head = None;
+    let total_chars = s.chars().count();
     for ch in s.chars(){
-        if ch == ')'{
-            paren_start  = false;
-            //println!("meme_face: {}", meme_face);
-            let last_bound = face_markers.pop();
-            if let Some(last_bound) = last_bound{
-                let mut upd_bound = last_bound.clone();   
-                upd_bound.face = meme_face.clone();
-                upd_bound.right = Some(total_width);
-                face_markers.push(upd_bound);
-            }
+        let last_char = index == total_chars - 1;
+        if meme_head.is_none() && ch == ' '{
+            meme_start = index + 1;
+            meme_body.clear();
+        }
+        if meme_head.is_some() && (ch == ' ' || last_char){
+            meme_end = index;     
+            let meme = Meme{
+               start_position: meme_start,  
+               head: meme_head.clone().unwrap(),
+               end_position: meme_end,
+               left_side: meme_left_side.clone(), 
+               right_side: meme_right_side.clone(),
+            };
+            memes.push(meme);
+            meme_right_side.clear();
+            meme_left_side.clear();
+            meme_body.clear();
+            meme_head = None;
+        }
+        if meme_head.is_some(){
+            meme_right_side.push(ch);
+        }
+
+        if paren_opened && ch == ')'{ //if paren_opened and encountered a closing
+            paren_opened  = false;
+            let head = Head{
+                start_position: start_position,
+                startx: startx,
+                face: meme_face.clone(),
+                end_position: index,
+                endx: total_width,
+            };
+            meme_head = Some(head.clone());
+            face_markers.push(head);
             meme_face.clear();
         }
-        if paren_start{
+        if paren_opened{
            meme_face.push(ch); 
         }
         if ch == '('{
-            paren_start = true;
+            paren_opened = true;
+            startx = total_width;
+            start_position = index;
+            meme_left_side = meme_body.clone();
             meme_face.clear();
-            let sbound = Head{
-                left: Some(total_width),
-                face: "".into(),
-                right: None
-            };
-            face_markers.push(sbound);
         }
+        meme_body.push(ch);
         if let Some(uw) = ch.width(){
             total_width += uw;
         }
         index += 1;
     } 
-    face_markers
+    memes
 }
 
 #[test]
@@ -226,9 +313,52 @@ fn test_meme() {
 #[test]
 fn test_bound(){
     let meme = "(♥_♥)";
-    let bounds = meme_faces(meme); 
-    for b in bounds{
+    let memes = parse_memes(meme); 
+    for m in memes{
+        let b = m.head;
         println!("bound {:?} d:{} w:{} ", b, b.distance(), b.face_width());
+        assert_eq!(3, b.face_width());
     }
-    panic!();
+}
+
+fn escape_char(ch: &str) -> String {
+    let escs = [("\"", "&quot;"), ("'", "&apos;"), ("<", "&lt;"), (">", "&gt;"), ("&", "&amp;")];
+    let quote_match: Option<&(&str, &str)> = escs.iter()
+        .find(|pair| {
+            let &(e, _) = *pair;
+            e == ch
+        });
+    let quoted: String = match quote_match {
+        Some(&(_, quoted)) => String::from(quoted),
+        None => {
+            let mut s = String::new();
+            s.push_str(&ch);
+            s
+        }
+    };
+    quoted
+
+}
+
+
+#[test]
+fn test_body(){
+    let meme = "( ^o^)ノ";
+    println!("{}", meme);
+    let bodies = parse_memes(meme);
+    for b in &bodies{
+        println!("{:#?}",b);
+    }
+    assert_eq!(1, bodies.len());
+}
+
+#[test]
+fn test_body2(){
+    let meme = "ヘ( ^o^)ノ ＼(^_^ )Gimme Five";
+    println!("{}", meme);
+    let bodies = parse_memes(meme);
+    for b in &bodies{
+        println!("{:#?}",b);
+    }
+    assert_eq!(2, bodies.len());
 }
