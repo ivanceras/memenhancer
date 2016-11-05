@@ -14,6 +14,13 @@ pub struct Settings {
     text_height: f32,
 }
 
+impl Settings{
+    
+    fn offset(&self)->(f32, f32){
+        (0.0, self.text_height * 2.0)
+    }
+}
+
 impl Default for Settings {
     fn default() -> Settings {
         Settings {
@@ -22,6 +29,13 @@ impl Default for Settings {
         }
     }
 }
+
+enum Anchor{
+    Start,
+    Middle,
+    End
+}
+
 
 /// The whole meme body
 /// 
@@ -40,13 +54,42 @@ struct Meme{
 
 impl Meme{
     
-    fn get_svg_elements(&self, x: usize, y: usize, settings: &Settings) -> Vec<Box<Node>>{
+    fn get_svg_elements(&self, settings: &Settings) -> Vec<Box<Node>>{
         let mut elements = vec![];
-        elements.extend(self.head.get_svg_elements(x, y, settings));
+        elements.extend(self.head.get_svg_elements(settings));
+        let right_text = to_svg_text(&self.right_side, self.head.endx, 0, settings, Anchor::Start);
+        let left_text = to_svg_text(&self.left_side, self.head.startx - 1, 0, settings, Anchor::End);
+        elements.push(Box::new(left_text));
+        elements.push(Box::new(right_text));
         elements
     }
 
     
+}
+
+
+fn to_svg_text(s: &str, x: usize, y: usize, settings: &Settings, anchor: Anchor) -> SvgText {
+    let (offsetx, offsety) = settings.offset();
+    let sx = x as f32 * settings.text_width + settings.text_width / 4.0 + offsetx;
+    let sy = y as f32 * settings.text_height + settings.text_height * 3.0 / 4.0 + offsety;
+    let mut svg_text = SvgText::new()
+        .set("x", sx)
+        .set("y", sy);
+    match anchor{
+        Anchor::Start => {
+            svg_text.assign("text-anchor", "start");
+        }
+        Anchor::Middle => {
+            svg_text.assign("text-anchor", "middle");
+        }
+        Anchor::End => {
+            svg_text.assign("text-anchor", "end");
+        }
+    };
+
+    let text_node = svg::node::Text::new(escape_str(s));
+    svg_text.append(text_node);
+    svg_text
 }
 
 
@@ -80,35 +123,28 @@ impl Head{
         self.face.width()
     }
     
-    fn get_svg_elements(&self, x:usize, y:usize,settings:&Settings) -> Vec<Box<Node>> {
+    fn get_svg_elements(&self, settings:&Settings) -> Vec<Box<Node>> {
         let mut elements: Vec<Box<Node>> = vec![];
-        elements.push(Box::new(self.get_circle(x, y, settings)));
-        elements.push(Box::new(self.get_face_text(x, y, settings)));
+        elements.push(Box::new(self.get_circle(settings)));
+        elements.push(Box::new(self.get_face_text(settings)));
         elements
     }
 
-    fn get_face_text(&self, x:usize, y:usize, settings: &Settings) -> SvgText{
-        let sx = x as f32 * settings.text_width + settings.text_width / 4.0;
-        let sy = y as f32 * settings.text_height + settings.text_height * 3.0 / 4.0;
-        let mut svg_text = SvgText::new()
-            .set("x", sx)
-            .set("y", sy);
-        let text_node = svg::node::Text::new(escape_char(&self.face.to_string()));
-        svg_text.append(text_node);
-        svg_text
+    fn get_face_text(&self, settings: &Settings) -> SvgText{
+        to_svg_text(&self.face, self.startx + 1, 0, settings, Anchor::Start)
     }
 
-    fn get_circle(&self, x:usize, y:usize, settings: &Settings)-> SvgCircle{
+    fn get_circle(&self, settings: &Settings)-> SvgCircle{
+        let (offsetx, offsety) = settings.offset();
         let text_width = settings.text_width;
         let text_height = settings.text_height;
-        let xloc = x as f32 * text_width;
-        let yloc = y as f32 * text_height;
-        let radius = self.face_width() as f32 / 2.0 + 0.5;
+        let xloc = self.startx as f32 * text_width;
+        let radius = self.distance() as f32 / 2.0;
         let startx = self.startx as f32;
         let endx = self.endx as f32;
-        let center = 0.5 + startx + radius;
-        let cx = center * text_width + xloc;
-        let cy = yloc + text_height / 2.0;
+        let center = startx + radius;
+        let cx = center * text_width; 
+        let cy = text_height / 2.0 + offsety;
         let cr = radius * text_width;
 
         SvgCircle::new()
@@ -169,9 +205,8 @@ pub fn is_meme(ch: &str) -> bool{
     || total_bytes > total_width
 }
 
-pub fn to_svg(s: &str, x: usize, y:usize, 
-        text_width: f32, text_height: f32) -> String {
-    let elements = get_svg_elements(s, x, y, text_width, text_height);
+pub fn to_svg(s: &str, text_width: f32, text_height: f32) -> String {
+    let elements = get_svg_elements(s, text_width, text_height);
     let mut svg = String::new();
     for elm in elements{
         svg.push_str(&elm.to_string())
@@ -179,8 +214,7 @@ pub fn to_svg(s: &str, x: usize, y:usize,
     svg
 }
 
-pub fn get_svg_elements(s: &str, x: usize, y:usize, 
-        text_width: f32, text_height: f32) -> Vec<Box<Node>> {
+pub fn get_svg_elements(s: &str, text_width: f32, text_height: f32) -> Vec<Box<Node>> {
     let settings = Settings {
                     text_width: text_width,
                     text_height: text_height
@@ -188,7 +222,7 @@ pub fn get_svg_elements(s: &str, x: usize, y:usize,
     let memes = parse_memes(s);
     let mut svg = vec![];
     for meme in memes{
-        let mel = meme.get_svg_elements(x+10, y, &settings);
+        let mel = meme.get_svg_elements(&settings);
         svg.extend(mel);
     }
     svg
@@ -321,18 +355,26 @@ fn test_bound(){
     }
 }
 
-fn escape_char(ch: &str) -> String {
-    let escs = [("\"", "&quot;"), ("'", "&apos;"), ("<", "&lt;"), (">", "&gt;"), ("&", "&amp;")];
-    let quote_match: Option<&(&str, &str)> = escs.iter()
+fn escape_str(s: &str) -> String{
+    let mut escaped = String::new();
+    for c in s.chars(){
+        escaped.push_str(&escape_char(&c));    
+    }
+    escaped
+}
+
+fn escape_char(ch: &char) -> String {
+    let escs = [('"', "&quot;"), ('\'', "&apos;"), ('<', "&lt;"), ('>', "&gt;"), ('&', "&amp;")];
+    let quote_match: Option<&(char, &str)> = escs.iter()
         .find(|pair| {
             let &(e, _) = *pair;
-            e == ch
+            e == *ch
         });
     let quoted: String = match quote_match {
         Some(&(_, quoted)) => String::from(quoted),
         None => {
             let mut s = String::new();
-            s.push_str(&ch);
+            s.push(*ch);
             s
         }
     };
@@ -361,4 +403,15 @@ fn test_body2(){
         println!("{:#?}",b);
     }
     assert_eq!(2, bodies.len());
+}
+
+#[test]
+fn test_position(){
+    let meme = "ヘ( ^o^)ノ ＼(^_^ )Gimme Five";
+    println!("{}", meme);
+    let bodies = parse_memes(meme);
+    for b in &bodies{
+        println!("{:#?}",b);
+    }
+    assert_eq!(1, bodies.len());
 }

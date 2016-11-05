@@ -11,6 +11,37 @@ fn main(){
     let y = 10;
     let text_width = 8.0;
     let text_height = 16.0;
-    let svg = memenhancer::to_svg(meme, x, y, text_width, text_height);
-    println!("<svg>{}</svg>", svg);
+    let svg = memenhancer::to_svg(meme, text_width, text_height);
+    println!("<meta charset='utf8'/>");
+    println!(r#"<svg xmlns="http://www.w3.org/2000/svg" font-family="arial" font-size="14" height="6976" width="1032">"#);
+    println!("{}",get_styles());
+    println!("{}", svg);
+    println!("</svg>");
+}
+
+fn get_styles()->String{
+let styles = r#"
+<style xmlns="http://www.w3.org/2000/svg">
+
+    line, path {
+      stroke: black;
+      stroke-width: 2;
+      stroke-opacity: 1;
+      fill-opacity: 1;
+      stroke-linecap: round;
+      stroke-linejoin: miter;
+    }
+    circle {
+      stroke: black;
+      stroke-width: 1;
+      stroke-opacity: 1;
+      fill-opacity: 1;
+      stroke-linecap: round;
+      stroke-linejoin: miter;
+      fill:white;
+    }
+    
+</style>
+"#.into();
+styles
 }
