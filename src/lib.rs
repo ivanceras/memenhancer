@@ -374,10 +374,10 @@ fn test_meme() {
 fn test_bound(){
     let meme = "(♥_♥)";
     let memes = parse_memes(meme); 
-    for m in memes{
+    for m in memes.memes{
         let b = m.head;
-        println!("bound {:?} d:{} w:{} ", b, b.distance(), b.face_width());
-        assert_eq!(3, b.face_width());
+        println!("bound {:?} d:{} ", b , b.distance());
+        assert_eq!(3, b.distance());
     }
 }
 
@@ -414,10 +414,10 @@ fn test_body(){
     let meme = "( ^o^)ノ";
     println!("{}", meme);
     let bodies = parse_memes(meme);
-    for b in &bodies{
+    for b in &bodies.memes{
         println!("{:#?}",b);
     }
-    assert_eq!(1, bodies.len());
+    assert_eq!(1, bodies.memes.len());
 }
 
 #[test]
@@ -425,10 +425,10 @@ fn test_body2(){
     let meme = "ヘ( ^o^)ノ ＼(^_^ )Gimme Five";
     println!("{}", meme);
     let bodies = parse_memes(meme);
-    for b in &bodies{
+    for b in &bodies.memes{
         println!("{:#?}",b);
     }
-    assert_eq!(2, bodies.len());
+    assert_eq!(2, bodies.memes.len());
 }
 
 #[test]
@@ -436,8 +436,8 @@ fn test_rest_of_text(){
     let meme = r#"The rest of   凸(•̀_•́)凸❤️ ( ͡° ͜ʖ ͡°) \(°□°)/层∀  the text is here"#;
     println!("{}", meme);
     let bodies = parse_memes(meme);
-    for b in &bodies{
+    for b in &bodies.memes{
         println!("{:#?}",b);
     }
-    assert_eq!(1, bodies.len());
+    assert_eq!(3, bodies.memes.len());
 }
