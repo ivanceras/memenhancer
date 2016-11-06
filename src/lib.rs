@@ -37,6 +37,7 @@ pub enum Anchor{
 }
 
 
+#[derive(Debug)]
 struct Body{
     memes: Vec<Meme>,
     rest_str: Vec<(usize, String)>
@@ -45,14 +46,14 @@ struct Body{
 impl Body {
 
     
-    fn get_svg_elements(&self, settings: &Settings) -> Vec<Box<Node>>{
+    fn get_svg_elements(&self, y: usize, settings: &Settings) -> Vec<Box<Node>>{
         let mut svg:Vec<Box<Node>> = vec![];
         for &(startx, ref text)  in &self.rest_str{
-            let svg_text = to_svg_text(text, startx, 0, settings, Anchor::Start);    
+            let svg_text = to_svg_text(text, startx, y, settings, Anchor::Start);    
             svg.push(Box::new(svg_text));
         }
         for meme in &self.memes{
-            svg.extend(meme.get_svg_elements(settings));
+            svg.extend(meme.get_svg_elements(y, settings));
         }
         svg
     }
@@ -75,11 +76,11 @@ struct Meme{
 
 impl Meme{
     
-    fn get_svg_elements(&self, settings: &Settings) -> Vec<Box<Node>>{
+    fn get_svg_elements(&self, y: usize, settings: &Settings) -> Vec<Box<Node>>{
         let mut elements = vec![];
-        elements.extend(self.head.get_svg_elements(settings));
-        let right_text = to_svg_text(&self.right_side, self.head.endx, 0, settings, Anchor::Start);
-        let left_text = to_svg_text(&self.left_side, self.head.startx, 0, settings, Anchor::End);
+        elements.extend(self.head.get_svg_elements(y, settings));
+        let right_text = to_svg_text(&self.right_side, self.head.endx, y, settings, Anchor::Start);
+        let left_text = to_svg_text(&self.left_side, self.head.startx, y, settings, Anchor::End);
         elements.push(Box::new(left_text));
         elements.push(Box::new(right_text));
         elements
@@ -145,26 +146,27 @@ impl Head{
         self.endx - self.startx     
     }
 
-    fn get_svg_elements(&self, settings:&Settings) -> Vec<Box<Node>> {
+    fn get_svg_elements(&self, y: usize, settings:&Settings) -> Vec<Box<Node>> {
         let mut elements: Vec<Box<Node>> = vec![];
-        elements.push(Box::new(self.get_circle(settings)));
-        elements.push(Box::new(self.get_face_text(settings)));
+        elements.push(Box::new(self.get_circle(y, settings)));
+        elements.push(Box::new(self.get_face_text(y, settings)));
         elements
     }
 
-    fn get_face_text(&self, settings: &Settings) -> SvgText{
-        let c = self.calc_circle(settings);
-        to_svg_text_pixel(&self.face, c.cx, 0.0, settings, Anchor::Middle)
+    fn get_face_text(&self, y:usize, settings: &Settings) -> SvgText{
+        let c = self.calc_circle(y, settings);
+        let sy = y as f32 * settings.text_height;
+        to_svg_text_pixel(&self.face, c.cx, sy, settings, Anchor::Middle)
     }
 
-    fn calc_circle(&self, settings: &Settings) -> Circle {
+    fn calc_circle(&self, y:usize, settings: &Settings) -> Circle {
         let (offsetx, offsety) = settings.offset();
         let text_width = settings.text_width;
         let text_height = settings.text_height;
         let radius = self.distance() as f32 / 2.0;
         let center = self. startx as f32 + radius;
         let cx = center * text_width + offsetx; 
-        let cy = text_height / 2.0 + offsety;
+        let cy = y as f32 * text_height + text_height / 2.0 + offsety;
         let cr = radius * text_width;
         Circle{
             cx: cx,
@@ -173,8 +175,8 @@ impl Head{
         }
     }
 
-    fn get_circle(&self, settings: &Settings)-> SvgCircle{
-        let c = self.calc_circle(settings);
+    fn get_circle(&self, y: usize, settings: &Settings)-> SvgCircle{
+        let c = self.calc_circle(y, settings);
         SvgCircle::new()
             .set("cx",c.cx)
             .set("cy", c.cy)
@@ -231,24 +233,36 @@ pub fn is_meme(ch: &str) -> bool{
     gte_bytes2 > 0 || gte_width2 > 0
     || zero_width > 0 || gte_unicode_1k > 0
     || total_bytes > total_width
+    || !is_expression(ch)
 }
 
 pub fn to_svg(s: &str, text_width: f32, text_height: f32) -> String {
-    let elements = get_svg_elements(s, text_width, text_height);
+    let mut i = 0;
     let mut svg = String::new();
-    for elm in elements{
-        svg.push_str(&elm.to_string())
+    for line in s.lines(){
+        let sl = to_svg_line(i, line, text_width, text_height);
+        svg.push_str(&sl);
+        i += 1;
     }
     svg
 }
 
-pub fn get_svg_elements(s: &str, text_width: f32, text_height: f32) -> Vec<Box<Node>> {
+pub fn to_svg_line(y: usize, s: &str, text_width: f32, text_height: f32) -> String {
+    let elements = get_svg_elements(y, s, text_width, text_height);
+    let mut svg = String::new();
+    for elm in elements{
+        svg.push_str(&elm.to_string());
+    }
+    svg
+}
+
+pub fn get_svg_elements(y: usize, s: &str, text_width: f32, text_height: f32) -> Vec<Box<Node>> {
     let settings = Settings {
                     text_width: text_width,
                     text_height: text_height
                    };
     let body = parse_memes(s);
-    body.get_svg_elements(&settings)
+    body.get_svg_elements(y, &settings)
 }
 
 
@@ -271,6 +285,35 @@ fn parse_memes(s: &str) -> Body{
     let mut rest_text:Vec<(usize, String)> = vec![];
     for ch in s.chars(){
         let last_char = index == total_chars - 1;
+        if meme_head.is_some(){
+            meme_right_side.push(ch);
+        }
+        if paren_opened && ch == ')'{ //if paren_opened and encountered a closing
+            paren_opened  = false;
+            if is_meme(&meme_face){
+                let head = Head{
+                    start_position: start_position,
+                    startx: startx,
+                    face: meme_face.clone(),
+                    end_position: index,
+                    endx: total_width,
+                };
+                meme_head = Some(head.clone());
+                face_markers.push(head);
+                meme_face.clear();
+            }
+        }
+        if paren_opened{
+           meme_face.push(ch); 
+        }
+        if ch == '('{
+            paren_opened = true;
+            startx = total_width;
+            start_position = index;
+            meme_left_side = meme_body.clone();
+            meme_face.clear();
+        }
+
         if meme_head.is_none() && (ch == ' ' || last_char){
             meme_start = index + 1;
             if !paren_opened{
@@ -297,40 +340,12 @@ fn parse_memes(s: &str) -> Body{
             meme_body.clear();
             meme_head = None;
         }
-        if meme_head.is_some(){
-            meme_right_side.push(ch);
-        }
-
-        if paren_opened && ch == ')'{ //if paren_opened and encountered a closing
-            paren_opened  = false;
-            let head = Head{
-                start_position: start_position,
-                startx: startx,
-                face: meme_face.clone(),
-                end_position: index,
-                endx: total_width,
-            };
-            meme_head = Some(head.clone());
-            face_markers.push(head);
-            meme_face.clear();
-        }
-        if paren_opened{
-           meme_face.push(ch); 
-        }
-        if ch == '('{
-            paren_opened = true;
-            startx = total_width;
-            start_position = index;
-            meme_left_side = meme_body.clone();
-            meme_face.clear();
-        }
         meme_body.push(ch);
         if let Some(uw) = ch.width(){
             total_width += uw;
         }
         index += 1;
     } 
-    //println!("rest_text: {:#?}", rest_text);
     Body{
         memes: memes,
         rest_str: regroup_rest_text(&rest_text)
@@ -363,11 +378,24 @@ fn regroup_rest_text(rest_text: &Vec<(usize, String)>)->Vec<(usize, String)>{
 
 #[test]
 fn test_meme() {
-    assert!(!is_meme(" -_- "));
-    assert!(!is_meme("     "));
     assert!(is_meme(" ͡° ͜ʖ ͡°"));
     assert!(is_meme("⌐■_■"));
     assert!(is_meme("ツ"));
+    assert!(!is_meme("svgbobg"));
+    assert!(!is_meme("not a meme in space"));
+    assert!(is_meme(" -_- "));
+    assert!(is_meme("-_-"));
+    assert!(!is_meme("     "));
+}
+
+#[test]
+fn test_expression(){
+    assert!(is_meme("^_^"));
+    assert!(is_meme("x_x"));
+    assert!(!is_meme("+"));
+    assert!(!is_meme("x+y"));
+    assert!(!is_meme("x^2*y^2"));
+    assert!(!is_meme("x^2 * y^2"));
 }
 
 #[test]
@@ -377,7 +405,7 @@ fn test_bound(){
     for m in memes.memes{
         let b = m.head;
         println!("bound {:?} d:{} ", b , b.distance());
-        assert_eq!(3, b.distance());
+        assert_eq!(4, b.distance());
     }
 }
 
@@ -409,9 +437,35 @@ fn escape_char(ch: &char) -> String {
 }
 
 
+fn is_operator(c: char) -> bool{
+    c == '+' || c == '-' || c == '*' || c == '/'
+    || c == '^' || c == '%' || c == '!' || c == ','
+    || c == '.' || c == '='
+}
+
+#[test]
+fn test_operator(){
+    assert!(!is_expression("^_^"));
+    assert!(is_operator('+'));
+    assert!(is_expression("+"));
+    assert!(is_expression("x+y"));
+    assert!(is_expression("x^2*y^2"));
+    assert!(is_expression("x^2 * y^2"));
+}
+
+//TODO: alternate alphanumeric_space and operator
+fn is_expression(ch: &str) -> bool{
+    is_alphanumeric_space_operator(ch) 
+}
+
+fn is_alphanumeric_space_operator(ch:&str) -> bool{
+    ch.chars().all(|c| c.is_alphanumeric() || c == ' ' || is_operator(c))
+}
+
+
 #[test]
 fn test_body(){
-    let meme = "( ^o^)ノ";
+    let meme = "( ^_^)ノ";
     println!("{}", meme);
     let bodies = parse_memes(meme);
     for b in &bodies.memes{
@@ -422,7 +476,7 @@ fn test_body(){
 
 #[test]
 fn test_body2(){
-    let meme = "ヘ( ^o^)ノ ＼(^_^ )Gimme Five";
+    let meme = "ヘ( ^_^)ノ ＼(^_^ )Gimme Five";
     println!("{}", meme);
     let bodies = parse_memes(meme);
     for b in &bodies.memes{
@@ -436,8 +490,27 @@ fn test_rest_of_text(){
     let meme = r#"The rest of   凸(•̀_•́)凸❤️ ( ͡° ͜ʖ ͡°) \(°□°)/层∀  the text is here"#;
     println!("{}", meme);
     let bodies = parse_memes(meme);
-    for b in &bodies.memes{
-        println!("{:#?}",b);
-    }
+    println!("{:#?}",bodies);
     assert_eq!(3, bodies.memes.len());
+    assert_eq!(2, bodies.rest_str.len());
+}
+
+#[test]
+fn test_meme_equation(){
+    let meme= r#"Equations are not rendered? ( -_- )  __(x+y)__  (^_^) (x^2+y^2)x"#;
+    println!("{}", meme);
+    let bodies = parse_memes(meme);
+    println!("{:#?}",bodies);
+    assert_eq!(2, bodies.memes.len());
+    assert_eq!(3, bodies.rest_str.len());
+}
+
+#[test]
+fn test_meme_equation2(){
+    let meme= r#"( -_- ) __(x+y)__ (^_^) (x^2+y^2)"#;
+    println!("{}", meme);
+    let bodies = parse_memes(meme);
+    println!("{:#?}",bodies);
+    assert_eq!(2, bodies.memes.len());
+    assert_eq!(2, bodies.rest_str.len());
 }
