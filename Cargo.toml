@@ -6,3 +6,6 @@ authors = ["lee"]
 [dependencies]
 unicode-width = "0.1"
 svg = "0.5"
+
+[dev-dependencies]
+handlebars = "0.21"

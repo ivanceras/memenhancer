@@ -7,9 +7,12 @@ use unicode_width::UnicodeWidthChar;
 use svg::node::element::Circle as SvgCircle;
 use svg::node::element::Text as SvgText;
 use svg::Node;
+use svg::node::element::SVG;
+use svg::node::element::Style;
+use svg::node::Text as TextNode;
 
 
-pub struct Settings {
+struct Settings {
     text_width: f32,
     text_height: f32,
 }
@@ -17,7 +20,7 @@ pub struct Settings {
 impl Settings{
     
     fn offset(&self)->(f32, f32){
-        (0.0, self.text_height * 2.0)
+        (self.text_width * 1.0, self.text_height * 2.0)
     }
 }
 
@@ -30,7 +33,7 @@ impl Default for Settings {
     }
 }
 
-pub enum Anchor{
+enum Anchor{
     Start,
     Middle,
     End
@@ -56,6 +59,21 @@ impl Body {
             svg.extend(meme.get_svg_elements(y, settings));
         }
         svg
+    }
+
+    // build the rest text in 1 string
+    fn unify_rest_text(&self) -> String{
+        let mut unify = String::new();
+        for &(sx, ref word) in &self.rest_str{
+            let lacks  = sx - unify.width();
+            if lacks > 0{
+                for i in 0..lacks{
+                    unify.push(' ')
+                }
+            }
+            unify.push_str(word);
+        } 
+        unify
     }
 }
 
@@ -114,7 +132,7 @@ fn to_svg_text_pixel(s: &str, x: f32, y: f32, settings: &Settings, anchor: Ancho
         }
     };
 
-    let text_node = svg::node::Text::new(escape_str(s));
+    let text_node = TextNode::new(escape_str(s));
     svg_text.append(text_node);
     svg_text
 }
@@ -138,10 +156,6 @@ struct Head{
 
 impl Head{
 
-    fn is_meme_face(&self) -> bool {
-        is_meme(&self.face)
-    }
-
     fn distance(&self) -> usize {
         self.endx - self.startx     
     }
@@ -160,13 +174,12 @@ impl Head{
     }
 
     fn calc_circle(&self, y:usize, settings: &Settings) -> Circle {
-        let (offsetx, offsety) = settings.offset();
         let text_width = settings.text_width;
         let text_height = settings.text_height;
         let radius = self.distance() as f32 / 2.0;
         let center = self. startx as f32 + radius;
-        let cx = center * text_width + offsetx; 
-        let cy = y as f32 * text_height + text_height / 2.0 + offsety;
+        let cx = center * text_width; 
+        let cy = y as f32 * text_height + text_height / 2.0;
         let cr = radius * text_width;
         Circle{
             cx: cx,
@@ -177,16 +190,17 @@ impl Head{
 
     fn get_circle(&self, y: usize, settings: &Settings)-> SvgCircle{
         let c = self.calc_circle(y, settings);
+        let (offsetx, offsety) = settings.offset();
         SvgCircle::new()
-            .set("cx",c.cx)
-            .set("cy", c.cy)
+            .set("cx",c.cx + offsetx)
+            .set("cy", c.cy + offsety)
             .set("r", c.r)
     }
 
 }
 
 #[derive(Debug)]
-pub struct Circle{
+struct Circle{
     cx: f32,
     cy: f32,
     r: f32,
@@ -198,7 +212,7 @@ pub struct Circle{
 /// has at least 1 zero sized width character (width = 0)
 /// has at least 1 character that has more than 1 byte in size
 /// unicode value is way up high
-pub fn is_meme(ch: &str) -> bool{
+fn is_meme(ch: &str) -> bool{
     let total_bytes = ch.len();
     let total_width = ch.width();
     let mut gte_bytes2 = 0; 
@@ -236,31 +250,81 @@ pub fn is_meme(ch: &str) -> bool{
     || !is_expression(ch)
 }
 
-pub fn to_svg(s: &str, text_width: f32, text_height: f32) -> String {
-    let mut i = 0;
-    let mut svg = String::new();
+
+fn calc_dimension(s: &str) -> (usize, usize) {
+    let mut longest = 0;
     for line in s.lines(){
-        let sl = to_svg_line(i, line, text_width, text_height);
-        svg.push_str(&sl);
-        i += 1;
+        let line_width = line.width();
+        if line_width > longest{
+            longest = line_width
+        }
     }
+    let line_count = s.lines().count();
+    (longest, line_count)
+}
+
+pub fn to_svg(s: &str, text_width: f32, text_height: f32) -> SVG {
+    let settings = &Settings{
+                text_width: text_width,
+                text_height: text_height,
+            };
+    let mut svg = SVG::new()
+            .set("font-size", 14)
+            .set("font-family", "arial");
+
+        svg.append(get_styles());
+    
+    let nodes = to_svg_lines(s,settings);
+    for elm in nodes{
+        let text_node = TextNode::new(elm.to_string());
+        svg.append(text_node);
+    }
+
+    let (offsetx, offsety) = settings.offset();
+    let (wide, high) = calc_dimension(s);
+    let width = wide as f32 * text_width + offsetx;
+    let height = (high + 2 ) as f32 * text_height + offsety;
+    svg.assign("width", width);
+    svg.assign("height", height);
     svg
 }
 
-pub fn to_svg_line(y: usize, s: &str, text_width: f32, text_height: f32) -> String {
-    let elements = get_svg_elements(y, s, text_width, text_height);
-    let mut svg = String::new();
-    for elm in elements{
-        svg.push_str(&elm.to_string());
+
+fn get_styles() -> Style {
+    let style = r#"
+    line, path {
+      stroke: black;
+      stroke-width: 2;
+      stroke-opacity: 1;
+      fill-opacity: 1;
+      stroke-linecap: round;
+      stroke-linejoin: miter;
     }
-    svg
+    circle {
+      stroke: black;
+      stroke-width: 1;
+      stroke-opacity: 1;
+      fill-opacity: 1;
+      stroke-linecap: round;
+      stroke-linejoin: miter;
+      fill:white;
+    }
+    "#;
+    Style::new(style)
 }
 
-pub fn get_svg_elements(y: usize, s: &str, text_width: f32, text_height: f32) -> Vec<Box<Node>> {
-    let settings = Settings {
-                    text_width: text_width,
-                    text_height: text_height
-                   };
+fn to_svg_lines(s: &str, settings: &Settings) -> Vec<Box<Node>> {
+    let mut elements = vec![];
+    let mut y = 0;
+    for line in s.lines(){
+        let line_elm = get_svg_elements(y, s, settings);
+        elements.extend(line_elm);
+        y += 1;
+    }
+    elements
+}
+
+fn get_svg_elements(y: usize, s: &str, settings: &Settings) -> Vec<Box<Node>> {
     let body = parse_memes(s);
     body.get_svg_elements(y, &settings)
 }
@@ -496,6 +560,20 @@ fn test_rest_of_text(){
 }
 
 #[test]
+fn test_unify_rest_of_text(){
+    let meme = r#"The rest of   凸(•̀_•́)凸❤️ ( ͡° ͜ʖ ͡°) \(°□°)/层∀  the text is here"#;
+    let resi = r#"The rest of                                   the text is here"#;
+    println!("{}", meme);
+    let bodies = parse_memes(meme);
+    println!("{:#?}",bodies);
+    assert_eq!(3, bodies.memes.len());
+    assert_eq!(2, bodies.rest_str.len());
+    assert_eq!(meme.width(), bodies.unify_rest_text().width());
+    println!("residue: {} meme: {} rest_text:{}", resi.width(), meme.width(), bodies.unify_rest_text().width());
+    assert_eq!(resi.to_string(), bodies.unify_rest_text());
+}
+
+#[test]
 fn test_meme_equation(){
     let meme= r#"Equations are not rendered? ( -_- )  __(x+y)__  (^_^) (x^2+y^2)x"#;
     println!("{}", meme);
@@ -514,3 +592,5 @@ fn test_meme_equation2(){
     assert_eq!(2, bodies.memes.len());
     assert_eq!(2, bodies.rest_str.len());
 }
+
+
