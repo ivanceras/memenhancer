@@ -95,11 +95,11 @@ struct Meme{
 impl Meme{
     
     fn get_svg_elements(&self, y: usize, settings: &Settings) -> Vec<Box<Node>>{
-        let mut elements = vec![];
-        elements.extend(self.head.get_svg_elements(y, settings));
-        let right_text = to_svg_text(&self.right_side, self.head.endx, y, settings, Anchor::Start);
+        let mut elements:Vec<Box<Node>> = vec![];
         let left_text = to_svg_text(&self.left_side, self.head.startx, y, settings, Anchor::End);
         elements.push(Box::new(left_text));
+        elements.extend(self.head.get_svg_elements(y, settings));
+        let right_text = to_svg_text(&self.right_side, self.head.endx, y, settings, Anchor::Start);
         elements.push(Box::new(right_text));
         elements
     }
@@ -114,6 +114,10 @@ fn to_svg_text(s: &str, x: usize, y: usize, settings: &Settings, anchor: Anchor)
 }
 
 fn to_svg_text_pixel(s: &str, x: f32, y: f32, settings: &Settings, anchor: Anchor) -> SvgText {
+    to_svg_text_pixel_escaped(&escape_str(s), x, y, settings, anchor)
+}
+
+fn to_svg_text_pixel_escaped(s: &str, x: f32, y: f32, settings: &Settings, anchor: Anchor) -> SvgText {
     let (offsetx, offsety) = settings.offset();
     let sx = x + offsetx;
     let sy = y + settings.text_height * 3.0 / 4.0 + offsety;
@@ -132,7 +136,7 @@ fn to_svg_text_pixel(s: &str, x: f32, y: f32, settings: &Settings, anchor: Ancho
         }
     };
 
-    let text_node = TextNode::new(escape_str(s));
+    let text_node = TextNode::new(s);
     svg_text.append(text_node);
     svg_text
 }
@@ -170,7 +174,8 @@ impl Head{
     fn get_face_text(&self, y:usize, settings: &Settings) -> SvgText{
         let c = self.calc_circle(y, settings);
         let sy = y as f32 * settings.text_height;
-        to_svg_text_pixel(&self.face, c.cx, sy, settings, Anchor::Middle)
+        let face = format!("<tspan class='head'>(</tspan>{}<tspan class='head'>)</tspan>", escape_str(&self.face));
+        to_svg_text_pixel_escaped(&face, c.cx, sy, settings, Anchor::Middle)
     }
 
     fn calc_circle(&self, y:usize, settings: &Settings) -> Circle {
@@ -263,6 +268,7 @@ fn calc_dimension(s: &str) -> (usize, usize) {
     (longest, line_count)
 }
 
+/// return an SVG document base from the text infor string
 pub fn to_svg(s: &str, text_width: f32, text_height: f32) -> SVG {
     let settings = &Settings{
                 text_width: text_width,
@@ -309,6 +315,10 @@ fn get_styles() -> Style {
       stroke-linejoin: miter;
       fill:white;
     }
+    tspan.head{
+        fill: none;
+        stroke: none;
+    }
     "#;
     Style::new(style)
 }
@@ -317,7 +327,7 @@ fn to_svg_lines(s: &str, settings: &Settings) -> Vec<Box<Node>> {
     let mut elements = vec![];
     let mut y = 0;
     for line in s.lines(){
-        let line_elm = get_svg_elements(y, s, settings);
+        let line_elm = get_svg_elements(y, line, settings);
         elements.extend(line_elm);
         y += 1;
     }
