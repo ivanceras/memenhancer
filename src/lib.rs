@@ -395,6 +395,7 @@ fn parse_memes(s: &str) -> Body{
                 let rest_start = total_width - rest_word.width();
                 if last_char{
                    rest_word.push(ch);
+                   rest_word.push_str(&meme_face);//the head is unmatched
                 }
                 rest_text.push((rest_start, rest_word));
             }
@@ -601,6 +602,17 @@ fn test_meme_equation2(){
     println!("{:#?}",bodies);
     assert_eq!(2, bodies.memes.len());
     assert_eq!(2, bodies.rest_str.len());
+}
+
+
+#[test]
+fn test_meme_unmatched_face(){
+    let meme= r#"(╯°□°] ╯︵ ┬─┻"#;
+    println!("{}", meme);
+    let bodies = parse_memes(meme);
+    println!("{:#?}",bodies);
+    assert_eq!(0, bodies.memes.len());
+    assert_eq!(1, bodies.rest_str.len());
 }
 
 
