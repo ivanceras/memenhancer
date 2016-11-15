@@ -20,7 +20,8 @@ struct Settings {
 impl Settings{
     
     fn offset(&self)->(f32, f32){
-        (self.text_width * 1.0, self.text_height * 2.0)
+        //(self.text_width * 1.0, self.text_height * 2.0)
+        (0.0, 0.0)
     }
 }
 
@@ -48,13 +49,19 @@ struct Body{
 
 impl Body {
 
+
+    fn has_memes(&self) -> bool{
+        !self.memes.is_empty()
+    }
     
     fn get_svg_elements(&self, y: usize, settings: &Settings) -> Vec<Box<Node>>{
         let mut svg:Vec<Box<Node>> = vec![];
+        /*
         for &(startx, ref text)  in &self.rest_str{
             let svg_text = to_svg_text(text, startx, y, settings, Anchor::Start);    
             svg.push(Box::new(svg_text));
         }
+        */
         for meme in &self.memes{
             svg.extend(meme.get_svg_elements(y, settings));
         }
@@ -249,10 +256,12 @@ fn is_meme(ch: &str) -> bool{
     println!("total_width: {}", total_width);
     println!("");
     */
-    gte_bytes2 > 0 || gte_width2 > 0
+    total_width <= 8 && // must be at most 8 character face
+    (gte_bytes2 > 0 || gte_width2 > 0
     || zero_width > 0 || gte_unicode_1k > 0
     || total_bytes > total_width
     || !is_expression(ch)
+    )
 }
 
 
@@ -323,6 +332,7 @@ fn get_styles() -> Style {
     Style::new(style)
 }
 
+/// process and parses each line
 fn to_svg_lines(s: &str, settings: &Settings) -> Vec<Box<Node>> {
     let mut elements = vec![];
     let mut y = 0;
@@ -334,9 +344,32 @@ fn to_svg_lines(s: &str, settings: &Settings) -> Vec<Box<Node>> {
     elements
 }
 
+/// process only 1 line
 fn get_svg_elements(y: usize, s: &str, settings: &Settings) -> Vec<Box<Node>> {
     let body = parse_memes(s);
     body.get_svg_elements(y, &settings)
+}
+
+/// parse the memes and return the svg together with the unmatched strings
+pub fn line_to_svg_with_excess_str(y: usize, s: &str, text_width: f32, text_height: f32) -> Option<(Vec<Box<Node>>, String)>{
+    let settings = &Settings{
+                text_width: text_width,
+                text_height: text_height,
+            };
+    let body = parse_memes(s);
+    if body.has_memes(){
+        let nodes = body.get_svg_elements(y, settings);
+        Some((nodes, body.unify_rest_text()))
+    }else{
+        None
+    }
+}
+
+#[test]
+fn test_1line(){
+    let meme = "";
+    let nodes = get_svg_elements(0, meme, &Settings::default());
+    assert_eq!(nodes.len(), 0);
 }
 
 
@@ -515,7 +548,7 @@ fn escape_char(ch: &char) -> String {
 fn is_operator(c: char) -> bool{
     c == '+' || c == '-' || c == '*' || c == '/'
     || c == '^' || c == '%' || c == '!' || c == ','
-    || c == '.' || c == '='
+    || c == '.' || c == '=' || c == '|' || c == '&'
 }
 
 #[test]
@@ -534,7 +567,7 @@ fn is_expression(ch: &str) -> bool{
 }
 
 fn is_alphanumeric_space_operator(ch:&str) -> bool{
-    ch.chars().all(|c| c.is_alphanumeric() || c == ' ' || is_operator(c))
+    ch.chars().all(|c| c.is_alphanumeric() || c == ' ' || c == '_' || is_operator(c))
 }
 
 
