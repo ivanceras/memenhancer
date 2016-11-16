@@ -350,12 +350,36 @@ fn get_svg_elements(y: usize, s: &str, settings: &Settings) -> Vec<Box<Node>> {
     body.get_svg_elements(y, &settings)
 }
 
-/// parse the memes and return the svg together with the unmatched strings
-pub fn line_to_svg_with_excess_str(y: usize, s: &str, text_width: f32, text_height: f32) -> Option<(Vec<Box<Node>>, String)>{
+/// return the SVG nodes per line and all the assembled rest of the string that is not a part of the memes
+pub fn get_meme_svg(input: &str, text_width: f32, text_height: f32) -> (Vec<Box<Node>>, String) {
     let settings = &Settings{
                 text_width: text_width,
                 text_height: text_height,
             };
+    let mut svg_elements:Vec<Box<Node + 'static>> = vec![];
+    let mut relines = String::new();
+    let text_width = settings.text_width;
+    let text_height = settings.text_height;
+    let mut y = 0;
+    for line in input.lines(){
+        match  line_to_svg_with_excess_str(y, line, settings){
+            Some((svg_elm, rest_text)) => {
+                relines.push_str(&rest_text);
+                relines.push('\n');
+                svg_elements.extend(svg_elm);
+            },
+            None => {
+                relines.push_str(line);
+                relines.push('\n');
+            }
+        }
+        y += 1;
+    } 
+    (svg_elements, relines)
+}
+
+/// parse the memes and return the svg together with the unmatched strings
+fn line_to_svg_with_excess_str(y: usize, s: &str, settings:&Settings) -> Option<(Vec<Box<Node>>, String)>{
     let body = parse_memes(s);
     if body.has_memes(){
         let nodes = body.get_svg_elements(y, settings);
