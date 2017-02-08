@@ -256,7 +256,7 @@ fn is_meme(ch: &str) -> bool{
     println!("total_width: {}", total_width);
     println!("");
     */
-    total_width <= 8 && // must be at most 8 character face
+    total_width <= 10 && // must be at most 10 character face
     (gte_bytes2 > 0 || gte_width2 > 0
     || zero_width > 0 || gte_unicode_1k > 0
     || total_bytes > total_width
