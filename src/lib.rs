@@ -1,3 +1,4 @@
+#![deny(warnings)]
 extern crate unicode_width;
 extern crate svg;
 
@@ -74,7 +75,7 @@ impl Body {
         for &(sx, ref word) in &self.rest_str{
             let lacks  = sx - unify.width();
             if lacks > 0{
-                for i in 0..lacks{
+                for _ in 0..lacks{
                     unify.push(' ')
                 }
             }
@@ -358,8 +359,6 @@ pub fn get_meme_svg(input: &str, text_width: f32, text_height: f32) -> (Vec<Box<
             };
     let mut svg_elements:Vec<Box<Node + 'static>> = vec![];
     let mut relines = String::new();
-    let text_width = settings.text_width;
-    let text_height = settings.text_height;
     let mut y = 0;
     for line in input.lines(){
         match  line_to_svg_with_excess_str(y, line, settings){
