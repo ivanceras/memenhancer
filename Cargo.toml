@@ -1,7 +1,12 @@
 [package]
 name = "memenhancer"
 version = "0.1.0"
-authors = ["lee"]
+authors = ["Jovansonlee B. Cesar <ivanceras@gmail.com>"]
+description = "Converts emojis into an enhanced look using svg graph"
+license = "MIT"
+documentation = "https://docs.rs/memenhancer"
+repository = "https://github.com/ivanceras/memenhancer"
+keywords = ["emoji", "emoticons", "meme", "svg"]
 
 [dependencies]
 unicode-width = "0.1"
