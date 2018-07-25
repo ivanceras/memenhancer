@@ -57,12 +57,6 @@ impl Body {
     
     fn get_svg_elements(&self, y: usize, settings: &Settings) -> Vec<Box<Node>>{
         let mut svg:Vec<Box<Node>> = vec![];
-        /*
-        for &(startx, ref text)  in &self.rest_str{
-            let svg_text = to_svg_text(text, startx, y, settings, Anchor::Start);    
-            svg.push(Box::new(svg_text));
-        }
-        */
         for meme in &self.memes{
             svg.extend(meme.get_svg_elements(y, settings));
         }
@@ -84,6 +78,8 @@ impl Body {
         unify
     }
 }
+
+
 
 /// The whole meme body
 /// 
@@ -207,6 +203,7 @@ impl Head{
         SvgCircle::new()
             .set("cx",c.cx + offsetx)
             .set("cy", c.cy + offsety)
+            .set("class", "donger")
             .set("r", c.r)
     }
 
@@ -325,6 +322,10 @@ fn get_styles() -> Style {
       stroke-linejoin: miter;
       fill:white;
     }
+    circle.donger{
+       stroke-width: 1;
+       fill: #fff;
+    }
     tspan.head{
         fill: none;
         stroke: none;
@@ -352,7 +353,7 @@ fn get_svg_elements(y: usize, s: &str, settings: &Settings) -> Vec<Box<Node>> {
 }
 
 /// return the SVG nodes per line and all the assembled rest of the string that is not a part of the memes
-pub fn get_meme_svg(input: &str, text_width: f32, text_height: f32) -> (Vec<Box<Node>>, String) {
+pub fn get_meme_svg(input: &str, text_width: f32, text_height: f32) -> (Vec<Box<Node>>, String, Style) {
     let settings = &Settings{
                 text_width: text_width,
                 text_height: text_height,
@@ -374,7 +375,7 @@ pub fn get_meme_svg(input: &str, text_width: f32, text_height: f32) -> (Vec<Box<
         }
         y += 1;
     } 
-    (svg_elements, relines)
+    (svg_elements, relines, get_styles())
 }
 
 /// parse the memes and return the svg together with the unmatched strings
