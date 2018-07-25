@@ -315,7 +315,7 @@ fn get_styles() -> Style {
     }
     circle {
       stroke: black;
-      stroke-width: 1;
+      stroke-width: 2;
       stroke-opacity: 1;
       fill-opacity: 1;
       stroke-linecap: round;
@@ -324,7 +324,7 @@ fn get_styles() -> Style {
     }
     circle.donger{
        stroke-width: 1;
-       fill: #fff;
+       fill: white;
     }
     tspan.head{
         fill: none;
